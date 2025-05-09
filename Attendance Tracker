@@ -1,0 +1,195 @@
+import openpyxl
+from openpyxl import Workbook
+import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+# ------------------ Constants ------------------
+ATTENDANCE_FILE = "attendance.xlsx"
+STUDENT_FILE = "students1.xlsx"
+TEACHER_FILE = "teachers.xlsx"
+SUBJECTS = ["FDS", "PSP", "EM-2", "EG", "PE"]
+TOTAL_STUDENTS = list(range(73, 145))  # Roll nos. 1 to 10
+
+
+# ------------------ File Initialization ------------------
+
+def initialize_files():
+    if not os.path.exists(ATTENDANCE_FILE):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Attendance"
+        ws.append(["Date", "Slot", "Subject", "Lecture Completed", "Absent Students", "Detain Students"])
+        wb.save(ATTENDANCE_FILE)
+
+    if not os.path.exists(STUDENT_FILE):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Students1"
+        ws.append(["Roll No", "Name", "Department", "Year"])
+        for i in TOTAL_STUDENTS:
+            ws.append([i, f"Student{i}", "Computer", "FY"])
+        wb.save(STUDENT_FILE)
+
+    if not os.path.exists(TEACHER_FILE):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Teachers"
+        ws.append(["Teacher Name", "Subject"])
+        teachers = [("Prof.P.B.Dhanwate", "FDS"), ("Prof.S.S.Gawali", "PSP"), ("Prof.L.B.Bawankar", "EM-2"),
+                    ("Prof.I.I.Sayyad", "EG"), ("Prof.B.R.Shinde", "PE"),("Prof.D.Jayavelu","PE")]
+        for t in teachers:
+            ws.append(t)
+        wb.save(TEACHER_FILE)
+
+
+def is_slot_taken(date, slot, subject):
+    wb = openpyxl.load_workbook(ATTENDANCE_FILE)
+    ws = wb["Attendance"]
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[0] == date and row[1] == slot and row[2].lower() == subject.lower():
+            return True
+    return False
+
+
+# ------------------ GUI Functions ------------------
+
+def take_attendance_gui():
+    def submit():
+        subject = subject_entry.get().strip().upper()
+        date = date_entry.get().strip()
+        slot = slot_entry.get().strip()
+        absentees_str = absentees_entry.get().strip()
+
+        if subject not in SUBJECTS:
+            messagebox.showerror("Error", "Invalid subject.")
+            return
+        if is_slot_taken(date, slot, subject):
+            messagebox.showinfo("Info", "This slot is already completed.")
+            return
+
+        absentees = [int(r.strip()) for r in absentees_str.split(",") if r.strip().isdigit()]
+        present_count = len(TOTAL_STUDENTS) - len(absentees)
+        attendance_percentage = (present_count / len(TOTAL_STUDENTS)) * 100
+        detained = [r for r in absentees if attendance_percentage < 75]
+
+        wb = openpyxl.load_workbook(ATTENDANCE_FILE)
+        ws = wb["Attendance"]
+        ws.append([date, slot, subject, "Yes", ", ".join(map(str, absentees)), ", ".join(map(str, detained))])
+        wb.save(ATTENDANCE_FILE)
+        messagebox.showinfo("Success", "✅ Attendance recorded successfully.")
+        form.destroy()
+
+    form = tk.Toplevel()
+    form.title("Take Attendance")
+    form.geometry("350x250")
+
+    tk.Label(form, text="Subject:").pack()
+    subject_entry = tk.Entry(form)
+    subject_entry.pack()
+
+    tk.Label(form, text="Date (YYYY-MM-DD):").pack()
+    date_entry = tk.Entry(form)
+    date_entry.pack()
+
+    tk.Label(form, text="Slot (e.g., 1st, 2nd):").pack()
+    slot_entry = tk.Entry(form)
+    slot_entry.pack()
+
+    tk.Label(form, text="Absent Roll Nos (e.g., 2,4):").pack()
+    absentees_entry = tk.Entry(form)
+    absentees_entry.pack()
+
+    tk.Button(form, text="Submit", command=submit).pack(pady=10)
+
+
+def show_detained_students_gui():
+    wb = openpyxl.load_workbook(ATTENDANCE_FILE)
+    ws = wb["Attendance"]
+    attendance_count = {roll: 0 for roll in TOTAL_STUDENTS}
+    total_lectures = 0
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        total_lectures += 1
+        absentees = row[4]
+        absent_list = [int(x.strip()) for x in absentees.split(",") if x.strip().isdigit()] if absentees else []
+
+        for roll in TOTAL_STUDENTS:
+            if roll not in absent_list:
+                attendance_count[roll] += 1
+
+    result = "📉 Detained Students (<75% Attendance):\n"
+    for roll, attended in attendance_count.items():
+        percentage = (attended / total_lectures) * 100
+        if percentage < 75:
+            result += f"Roll No: {roll}, Attendance: {percentage:.2f}%\n"
+
+    messagebox.showinfo("Detained Students", result)
+
+
+def display_all_attendance_gui():
+    wb = openpyxl.load_workbook(ATTENDANCE_FILE)
+    ws = wb["Attendance"]
+
+    attendance_count = {roll: 0 for roll in TOTAL_STUDENTS}
+    total_lectures = 0
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        total_lectures += 1
+        absentees = row[4]
+        absent_list = [int(x.strip()) for x in absentees.split(",") if x.strip().isdigit()] if absentees else []
+        for roll in TOTAL_STUDENTS:
+            if roll not in absent_list:
+                attendance_count[roll] += 1
+
+    result = f"📊 Attendance Summary (Total Lectures: {total_lectures}):\n"
+    for roll in TOTAL_STUDENTS:
+        percent = (attendance_count[roll] / total_lectures * 100) if total_lectures else 0
+        result += f"Roll No: {roll}, Attendance: {percent:.2f}%\n"
+
+    messagebox.showinfo("All Students Attendance", result)
+
+
+def display_student_data_gui():
+    wb = openpyxl.load_workbook(STUDENT_FILE)
+    ws = wb["Students1"]
+    result = "🎓 Student List:\n"
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        result += f"Roll No: {row[0]}, Name: {row[1]}, Dept: {row[2]}, Year: {row[3]}\n"
+    messagebox.showinfo("Student Data", result)
+
+
+def display_teacher_data_gui():
+    wb = openpyxl.load_workbook(TEACHER_FILE)
+    ws = wb["Teachers"]
+    result = "👨‍🏫 Teacher List:\n"
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        result += f"Name: {row[0]}, Subject: {row[1]}\n"
+    messagebox.showinfo("Teacher Data", result)
+
+
+# ------------------ Main GUI ------------------
+
+def main_gui():
+    initialize_files()
+
+    root = tk.Tk()
+    root.title("📘 College Attendance Tracker")
+    root.geometry("350x400")
+
+    ttk.Label(root, text="Select an Option:", font=("Arial", 14)).pack(pady=10)
+
+    ttk.Button(root, text="📝 Take Attendance", width=30, command=take_attendance_gui).pack(pady=5)
+    ttk.Button(root, text="📉 See Detained Students (<75%)", width=30, command=show_detained_students_gui).pack(pady=5)
+    ttk.Button(root, text="📊 Display All Student Attendance", width=30, command=display_all_attendance_gui).pack(pady=5)
+    ttk.Button(root, text="🎓 Display Student Data", width=30, command=display_student_data_gui).pack(pady=5)
+    ttk.Button(root, text="👨‍🏫 Display Teacher Data", width=30, command=display_teacher_data_gui).pack(pady=5)
+    ttk.Button(root, text="❌ Exit", width=30, command=root.destroy).pack(pady=20)
+
+    root.mainloop()
+
+
+# ------------------ Entry Point ------------------
+
+if __name__ == "__main__":
+    main_gui()
